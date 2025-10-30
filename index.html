@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Flux - Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --surface-color: #1a1a1a;
+            --primary-text: #E0E0E0;
+            --secondary-text: #888888;
+            --accent-red: #DC143C;
+            --accent-red-hover: #FF0000;
+            --accent-green: #22c55e;
+            --font-family: 'Roboto Mono', monospace;
+        }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--primary-text);
+        }
+        .matrix-bg {
+            background-color: #000;
+            background-image:
+                linear-gradient(rgba(0,128,0,0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,128,0,0.3) 1px, transparent 1px);
+            background-size: 20px 20px;
+            animation: matrix-scroll 2s linear infinite;
+        }
+        @keyframes matrix-scroll {
+            from { background-position: 0 0; }
+            to { background-position: 0 -20px; }
+        }
+        .card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--accent-red);
+            box-shadow: 0 0 15px rgba(220, 20, 60, 0.4);
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 25px rgba(220, 20, 60, 0.7);
+        }
+        .btn-danger {
+            background-color: var(--accent-red);
+            color: var(--primary-text);
+            transition: background-color 0.3s ease;
+        }
+        .btn-danger:hover {
+            background-color: var(--accent-red-hover);
+        }
+        .table-dark {
+            background-color: var(--surface-color);
+            border-collapse: collapse;
+        }
+        .table-dark th, .table-dark td {
+            border: 1px solid #333;
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .table-dark th {
+            background-color: #0d0d0d;
+            color: var(--accent-red);
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .table-dark tr:hover {
+            background-color: #2a2a2a;
+        }
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--secondary-text); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-red); }
+
+        /* Fade-in Animation */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="matrix-bg">
+
+    <div id="admin-login-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+        <div class="card w-full max-w-md p-8">
+            <h2 class="text-3xl font-bold text-center text-accent-red mb-6">ADMIN AUTH</h2>
+            <form id="admin-login-form">
+                <div class="mb-4">
+                    <label for="admin-username" class="block text-secondary-text mb-2">Admin Username</label>
+                    <input type="text" id="admin-username" required class="w-full p-3 bg-black border border-secondary-text text-primary-text focus:outline-none focus:border-accent-red">
+                </div>
+                <div class="mb-6">
+                    <label for="admin-password" class="block text-secondary-text mb-2">Admin Password</label>
+                    <input type="password" id="admin-password" required class="w-full p-3 bg-black border border-secondary-text text-primary-text focus:outline-none focus:border-accent-red">
+                </div>
+                <button type="submit" class="w-full btn-danger p-3 text-lg font-bold uppercase">Authenticate</button>
+            </form>
+            <p id="login-error" class="text-accent-red text-center mt-4"></p>
+        </div>
+    </div>
+
+    <div id="admin-dashboard" class="hidden min-h-screen p-4 md:p-8">
+        
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold text-accent-red">S:FLUX_ADMIN</h1>
+            <button id="admin-logout-btn" class="btn-danger px-4 py-2 font-bold"><i class="fas fa-sign-out-alt"></i> DISCONNECT</button>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="card p-6 flex items-center justify-between fade-in">
+                <div>
+                    <div class="text-5xl font-bold text-accent-green animate-pulse" id="total-users">0</div>
+                    <div class="text-lg text-secondary-text">Total Users</div>
+                </div>
+                <i class="fas fa-users text-5xl text-accent-green opacity-30"></i>
+            </div>
+            <div class="card p-6 flex items-center justify-between fade-in" style="animation-delay: 0.1s;">
+                <div>
+                    <div class="text-5xl font-bold text-accent-green animate-pulse" id="total-rooms">0</div>
+                    <div class="text-lg text-secondary-text">Total Rooms</div>
+                </div>
+                <i class="fas fa-server text-5xl text-accent-green opacity-30"></i>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <div class="card p-6 fade-in" style="animation-delay: 0.2s;">
+                <h2 class="text-2xl font-bold text-accent-red mb-4">Room Manifesto</h2>
+                <div class="table-container">
+                    <table class="w-full table-dark">
+                        <thead>
+                            <tr>
+                                <th>Room Name</th>
+                                <th>Owner</th>
+                                <th>Admins</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rooms-table-body">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card p-6 fade-in" style="animation-delay: 0.3s;">
+                <h2 class="text-2xl font-bold text-accent-red mb-4">Access Log (Latest 50)</h2>
+                <div class="table-container">
+                    <table class="w-full table-dark">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Room</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-table-body">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        // --- ZAROORI CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBhJaqgmVblByM-kdAaOIVJAsHUWCBHSHc",
+            authDomain: "photon-in-double-slit.firebaseapp.com",
+            projectId: "photon-in-double-slit",
+            storageBucket: "photon-in-double-slit.firebasestorage.app",
+            messagingSenderId: "465914359473",
+            appId: "1:465914359473:web:408f9c1bba43b90c45fc90",
+            measurementId: "G-P0STHZB8PM"
+        };
+        
+        // --- APNA UID YAHAN PASTE KAREIN ---
+        // Yeh UID aapke Firebase Auth section se milega
+        const SUPER_ADMIN_UID = "3MyLuyfS1gPdgvgKzzCqib77kfy1"; 
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // DOM Elements
+        const $ = (id) => document.getElementById(id);
+        const loginModal = $('admin-login-modal');
+        const dashboard = $('admin-dashboard');
+        const loginForm = $('admin-login-form');
+        const loginError = $('login-error');
+        const logoutBtn = $('admin-logout-btn');
+
+        // Global state for user mapping
+        let userMap = new Map();
+
+        // --- Auth Functions ---
+        
+        // 1. Check Auth State on Page Load
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // User is logged in, check if they are the admin
+                if (user.uid === SUPER_ADMIN_UID) {
+                    // YES, they are admin
+                    loginModal.classList.add('hidden');
+                    dashboard.classList.remove('hidden');
+                    loadDashboardData();
+                } else {
+                    // NOT admin, show error and log out
+                    alert('ACCESS DENIED: Not an authorized administrator.');
+                    auth.signOut();
+                }
+            } else {
+                // User is logged out
+                loginModal.classList.remove('hidden');
+                dashboard.classList.add('hidden');
+            }
+        });
+
+        // 2. Handle Admin Login
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = $('admin-username').value;
+            const password = $('admin-password').value;
+            const email = `${username.toLowerCase().replace(/\s+/g, '')}@photon.local`;
+            
+            loginError.textContent = '';
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                // onAuthStateChanged will handle the rest
+            } catch (error) {
+                console.error('Admin Login Failed:', error);
+                loginError.textContent = 'Authentication Failed: Invalid credentials.';
+            }
+        });
+
+        // 3. Handle Admin Logout
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut();
+        });
+
+        // --- Data Loading Functions ---
+
+        async function loadDashboardData() {
+            // Reset UI
+            $('total-users').textContent = '0';
+            $('total-rooms').textContent = '0';
+            $('rooms-table-body').innerHTML = '';
+            $('activity-table-body').innerHTML = '';
+
+            // Start all fetches in parallel
+            try {
+                await fetchUsers(); // Fetch users first to create the map
+                await Promise.all([
+                    fetchRooms(),
+                    fetchActivityLog()
+                ]);
+                
+                // Stop loading pulse
+                $('total-users').classList.remove('animate-pulse');
+                $('total-rooms').classList.remove('animate-pulse');
+
+            } catch (error) {
+                console.error("Error loading dashboard data:", error);
+                alert("Failed to load dashboard: " + error.message);
+            }
+        }
+
+        // 1. Fetch All Users
+        async function fetchUsers() {
+            userMap.clear();
+            const usersSnapshot = await db.collection('users').get();
+            let totalUsers = 0;
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                if (!userData.deleted) {
+                    totalUsers++;
+                    userMap.set(userData.uid, userData.username);
+                }
+            });
+            
+            $('total-users').textContent = totalUsers;
+        }
+
+        // 2. Fetch All Rooms
+        async function fetchRooms() {
+            const roomsSnapshot = await db.collection('rooms').get();
+            $('total-rooms').textContent = roomsSnapshot.size;
+            
+            const roomsTable = $('rooms-table-body');
+            roomsTable.innerHTML = ''; // Clear old data
+
+            for (const doc of roomsSnapshot.docs) {
+                const room = doc.data();
+                
+                // Get username from UID
+                const ownerName = userMap.get(room.ownerId) || room.ownerId.substring(0, 6) + '...';
+                
+                // Get admin usernames
+                const adminNames = (room.admins || [])
+                    .map(adminId => userMap.get(adminId) || 'Unknown')
+                    .join(', ');
+
+                const row = `
+                    <tr>
+                        <td class="text-primary-text">${room.name}</td>
+                        <td class="text-accent-green">${ownerName}</td>
+                        <td class="text-secondary-text">${adminNames || 'None'}</td>
+                    </tr>
+                `;
+                roomsTable.innerHTML += row;
+            }
+        }
+
+        // 3. Fetch Activity Log (Requires Collection Group Query)
+        async function fetchActivityLog() {
+            const activityTable = $('activity-table-body');
+            activityTable.innerHTML = '';
+            
+            try {
+                const activityQuery = db.collectionGroup('entryLog')
+                                        .orderBy('timestamp', 'desc')
+                                        .limit(50);
+                                        
+                const snapshot = await activityQuery.get();
+
+                if (snapshot.empty) {
+                     activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-text">No room entry log data found.</td></tr>';
+                     return;
+                }
+
+                snapshot.forEach(doc => {
+                    const log = doc.data();
+                    const roomName = doc.ref.parent.parent.id; // Get room ID from path
+                    const roomDoc = userMap.get(roomName) || roomName.substring(0, 10) + '...'; // This is not correct, we need room name
+
+                    const row = `
+                        <tr>
+                            <td class="text-primary-text">${log.username}</td>
+                            <td class="text-secondary-text">${log.action}</td>
+                            <td class="text-accent-green">${log.timestamp.toDate().toLocaleString()}</td>
+                        </tr>
+                    `;
+                    // We can't easily get room *name* here without another read.
+                    // Let's just show the action and user for now.
+                    
+                     const row_fixed = `
+                        <tr>
+                            <td class="text-primary-text">${log.username}</td>
+                            <td class="text-secondary-text">Joined Room</td>
+                            <td class="text-accent-green">${log.timestamp.toDate().toLocaleString()}</td>
+                        </tr>
+                    `;
+                    activityTable.innerHTML += row_fixed;
+                });
+                
+            } catch (error) {
+                console.error("Error fetching activity log:", error);
+                // Check for index error
+                if (error.code === 'failed-precondition') {
+                    activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-accent-red">Error: Firestore index required. Please check browser console (F12) for a link to create it.</td></tr>';
+                    console.error("Firestore Index Missing!", error.message);
+                } else {
+                     activityTable.innerHTML = `<tr><td colspan="3" class="text-center text-accent-red">Error: ${error.message}</td></tr>`;
+                }
+            }
+        }
+
+    </script>
+</body>
+</html>
