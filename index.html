@@ -156,7 +156,8 @@
                             </tr>
                         </thead>
                         <tbody id="rooms-table-body">
-                            </tbody>
+                            <!-- JS bharega -->
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -168,12 +169,13 @@
                         <thead>
                             <tr>
                                 <th>User</th>
-                                <th>Room</th>
+                                <th>Action</th>
                                 <th>Time</th>
                             </tr>
                         </thead>
                         <tbody id="activity-table-body">
-                            </tbody>
+                            <!-- JS bharega -->
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -211,8 +213,9 @@
         const loginError = $('login-error');
         const logoutBtn = $('admin-logout-btn');
 
-        // Global state for user mapping
+        // Global state for user and room mapping
         let userMap = new Map();
+        let roomMap = new Map(); // <-- NAYA: Room ID se Room Name map karne ke liye
 
         // --- Auth Functions ---
         
@@ -242,6 +245,7 @@
             e.preventDefault();
             const username = $('admin-username').value;
             const password = $('admin-password').value;
+            // Admin email ko hardcode kar dein ya ek specific format use karein
             const email = `${username.toLowerCase().replace(/\s+/g, '')}@photon.local`;
             
             loginError.textContent = '';
@@ -269,13 +273,18 @@
             $('rooms-table-body').innerHTML = '';
             $('activity-table-body').innerHTML = '';
 
-            // Start all fetches in parallel
+            // Maps ko clear karein
+            userMap.clear();
+            roomMap.clear();
+
             try {
-                await fetchUsers(); // Fetch users first to create the map
-                await Promise.all([
-                    fetchRooms(),
-                    fetchActivityLog()
-                ]);
+                // BADLA HUA: Functions ko serial mein call karein taake maps sahi se populate hon
+                // 1. Pehle users fetch karein (userMap ke liye)
+                await fetchUsers();
+                // 2. Phir rooms fetch karein (roomMap ke liye, yeh userMap bhi use karta hai)
+                await fetchRooms();
+                // 3. Aakhir mein activity log fetch karein (yeh roomMap use karta hai)
+                await fetchActivityLog();
                 
                 // Stop loading pulse
                 $('total-users').classList.remove('animate-pulse');
@@ -289,7 +298,6 @@
 
         // 1. Fetch All Users
         async function fetchUsers() {
-            userMap.clear();
             const usersSnapshot = await db.collection('users').get();
             let totalUsers = 0;
             
@@ -315,6 +323,9 @@
             for (const doc of roomsSnapshot.docs) {
                 const room = doc.data();
                 
+                // NAYA: Room map ko populate karein
+                roomMap.set(doc.id, room.name);
+
                 // Get username from UID
                 const ownerName = userMap.get(room.ownerId) || room.ownerId.substring(0, 6) + '...';
                 
@@ -340,6 +351,7 @@
             activityTable.innerHTML = '';
             
             try {
+                // Yeh query ab aapke naye rules ke mutabiq kaam karegi
                 const activityQuery = db.collectionGroup('entryLog')
                                         .orderBy('timestamp', 'desc')
                                         .limit(50);
@@ -347,29 +359,21 @@
                 const snapshot = await activityQuery.get();
 
                 if (snapshot.empty) {
-                     activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-text">No room entry log data found.</td></tr>';
-                     return;
+                    activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-text">No room entry log data found.</td></tr>';
+                    return;
                 }
 
                 snapshot.forEach(doc => {
                     const log = doc.data();
-                    const roomName = doc.ref.parent.parent.id; // Get room ID from path
-                    const roomDoc = userMap.get(roomName) || roomName.substring(0, 10) + '...'; // This is not correct, we need room name
-
-                    const row = `
-                        <tr>
-                            <td class="text-primary-text">${log.username}</td>
-                            <td class="text-secondary-text">${log.action}</td>
-                            <td class="text-accent-green">${log.timestamp.toDate().toLocaleString()}</td>
-                        </tr>
-                    `;
-                    // We can't easily get room *name* here without another read.
-                    // Let's just show the action and user for now.
                     
-                     const row_fixed = `
+                    // BADLA HUA: Room ID se Room Name hasil karein
+                    const roomId = doc.ref.parent.parent.id; // Get room ID from path
+                    const roomName = roomMap.get(roomId) || roomId.substring(0, 10) + '...'; // roomMap se naam fetch karein
+
+                    const row_fixed = `
                         <tr>
                             <td class="text-primary-text">${log.username}</td>
-                            <td class="text-secondary-text">Joined Room</td>
+                            <td class="text-secondary-text">Joined "${roomName}"</td>
                             <td class="text-accent-green">${log.timestamp.toDate().toLocaleString()}</td>
                         </tr>
                     `;
@@ -383,7 +387,7 @@
                     activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-accent-red">Error: Firestore index required. Please check browser console (F12) for a link to create it.</td></tr>';
                     console.error("Firestore Index Missing!", error.message);
                 } else {
-                     activityTable.innerHTML = `<tr><td colspan="3" class="text-center text-accent-red">Error: ${error.message}</td></tr>`;
+                    activityTable.innerHTML = `<tr><td colspan="3" class="text-center text-accent-red">Error: ${error.message}</td></tr>`;
                 }
             }
         }
