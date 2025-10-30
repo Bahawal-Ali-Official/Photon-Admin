@@ -23,6 +23,8 @@
             --accent-red: #DC143C;
             --accent-red-hover: #FF0000;
             --accent-green: #22c55e;
+            --accent-green-hover: #16a34a;
+            --accent-yellow: #f59e0b;
             --font-family: 'Roboto Mono', monospace;
         }
         body {
@@ -52,22 +54,47 @@
             transform: translateY(-5px);
             box-shadow: 0 0 25px rgba(220, 20, 60, 0.7);
         }
+        .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
         .btn-danger {
             background-color: var(--accent-red);
             color: var(--primary-text);
-            transition: background-color 0.3s ease;
         }
         .btn-danger:hover {
             background-color: var(--accent-red-hover);
         }
+        .btn-green {
+            background-color: var(--accent-green);
+            color: var(--bg-color);
+        }
+        .btn-green:hover {
+            background-color: var(--accent-green-hover);
+        }
+        .btn-yellow {
+            background-color: var(--accent-yellow);
+            color: var(--bg-color);
+        }
+        .btn-yellow:hover {
+            background-color: #d97706;
+        }
+
         .table-dark {
             background-color: var(--surface-color);
             border-collapse: collapse;
+            width: 100%;
         }
         .table-dark th, .table-dark td {
             border: 1px solid #333;
             padding: 0.75rem;
             text-align: left;
+            vertical-align: middle;
         }
         .table-dark th {
             background-color: #0d0d0d;
@@ -112,7 +139,7 @@
                     <label for="admin-password" class="block text-secondary-text mb-2">Admin Password</label>
                     <input type="password" id="admin-password" required class="w-full p-3 bg-black border border-secondary-text text-primary-text focus:outline-none focus:border-accent-red">
                 </div>
-                <button type="submit" class="w-full btn-danger p-3 text-lg font-bold uppercase">Authenticate</button>
+                <button type="submit" class="w-full btn btn-danger p-3 text-lg">Authenticate</button>
             </form>
             <p id="login-error" class="text-accent-red text-center mt-4"></p>
         </div>
@@ -122,9 +149,10 @@
         
         <header class="flex justify-between items-center mb-8">
             <h1 class="text-4xl font-bold text-accent-red">S:FLUX_ADMIN</h1>
-            <button id="admin-logout-btn" class="btn-danger px-4 py-2 font-bold"><i class="fas fa-sign-out-alt"></i> DISCONNECT</button>
+            <button id="admin-logout-btn" class="btn btn-danger px-4 py-2"><i class="fas fa-sign-out-alt"></i> DISCONNECT</button>
         </header>
 
+        <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="card p-6 flex items-center justify-between fade-in">
                 <div>
@@ -142,9 +170,28 @@
             </div>
         </div>
 
+        <!-- NAYA: User Registry Card -->
+        <div class="card p-6 fade-in mb-8" style="animation-delay: 0.2s;">
+            <h2 class="text-2xl font-bold text-accent-red mb-4">User Registry</h2>
+            <div class="table-container">
+                <table class="w-full table-dark">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>User ID</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <!-- JS bharega -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
-            <div class="card p-6 fade-in" style="animation-delay: 0.2s;">
+            <div class="card p-6 fade-in" style="animation-delay: 0.3s;">
                 <h2 class="text-2xl font-bold text-accent-red mb-4">Room Manifesto</h2>
                 <div class="table-container">
                     <table class="w-full table-dark">
@@ -153,6 +200,7 @@
                                 <th>Room Name</th>
                                 <th>Owner</th>
                                 <th>Admins</th>
+                                <th>Actions</th> <!-- NAYA -->
                             </tr>
                         </thead>
                         <tbody id="rooms-table-body">
@@ -162,7 +210,7 @@
                 </div>
             </div>
 
-            <div class="card p-6 fade-in" style="animation-delay: 0.3s;">
+            <div class="card p-6 fade-in" style="animation-delay: 0.4s;">
                 <h2 class="text-2xl font-bold text-accent-red mb-4">Access Log (Latest 50)</h2>
                 <div class="table-container">
                     <table class="w-full table-dark">
@@ -197,7 +245,6 @@
         };
         
         // --- APNA UID YAHAN PASTE KAREIN ---
-        // Yeh UID aapke Firebase Auth section se milega
         const SUPER_ADMIN_UID = "3MyLuyfS1gPdgvgKzzCqib77kfy1"; 
 
         // Initialize Firebase
@@ -215,26 +262,22 @@
 
         // Global state for user and room mapping
         let userMap = new Map();
-        let roomMap = new Map(); // <-- NAYA: Room ID se Room Name map karne ke liye
+        let roomMap = new Map();
 
         // --- Auth Functions ---
         
         // 1. Check Auth State on Page Load
         auth.onAuthStateChanged(user => {
             if (user) {
-                // User is logged in, check if they are the admin
                 if (user.uid === SUPER_ADMIN_UID) {
-                    // YES, they are admin
                     loginModal.classList.add('hidden');
                     dashboard.classList.remove('hidden');
                     loadDashboardData();
                 } else {
-                    // NOT admin, show error and log out
                     alert('ACCESS DENIED: Not an authorized administrator.');
                     auth.signOut();
                 }
             } else {
-                // User is logged out
                 loginModal.classList.remove('hidden');
                 dashboard.classList.add('hidden');
             }
@@ -245,14 +288,12 @@
             e.preventDefault();
             const username = $('admin-username').value;
             const password = $('admin-password').value;
-            // Admin email ko hardcode kar dein ya ek specific format use karein
             const email = `${username.toLowerCase().replace(/\s+/g, '')}@photon.local`;
             
             loginError.textContent = '';
 
             try {
                 await auth.signInWithEmailAndPassword(email, password);
-                // onAuthStateChanged will handle the rest
             } catch (error) {
                 console.error('Admin Login Failed:', error);
                 loginError.textContent = 'Authentication Failed: Invalid credentials.';
@@ -272,19 +313,19 @@
             $('total-rooms').textContent = '0';
             $('rooms-table-body').innerHTML = '';
             $('activity-table-body').innerHTML = '';
+            $('users-table-body').innerHTML = ''; // NAYA
 
-            // Maps ko clear karein
             userMap.clear();
             roomMap.clear();
 
             try {
-                // BADLA HUA: Functions ko serial mein call karein taake maps sahi se populate hon
-                // 1. Pehle users fetch karein (userMap ke liye)
+                // Pehle users aur rooms fetch karein (maps ke liye)
                 await fetchUsers();
-                // 2. Phir rooms fetch karein (roomMap ke liye, yeh userMap bhi use karta hai)
                 await fetchRooms();
-                // 3. Aakhir mein activity log fetch karein (yeh roomMap use karta hai)
+                // Phir activity log (yeh roomMap use karta hai)
                 await fetchActivityLog();
+                // NAYA: Users table render karein
+                renderUsers();
                 
                 // Stop loading pulse
                 $('total-users').classList.remove('animate-pulse');
@@ -301,16 +342,55 @@
             const usersSnapshot = await db.collection('users').get();
             let totalUsers = 0;
             
+            userMap.clear(); // Clear map before fetch
+            
             usersSnapshot.forEach(doc => {
                 const userData = doc.data();
                 if (!userData.deleted) {
                     totalUsers++;
-                    userMap.set(userData.uid, userData.username);
+                    // userMap mein poora user object save karein (ID aur Name)
+                    userMap.set(userData.uid, {
+                        username: userData.username, 
+                        uid: userData.uid 
+                    });
                 }
             });
             
             $('total-users').textContent = totalUsers;
         }
+        
+        // NAYA: Render Users Table
+        function renderUsers() {
+            const usersTable = $('users-table-body');
+            usersTable.innerHTML = ''; // Clear old data
+
+            if (userMap.size === 0) {
+                 usersTable.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-text">No active users found.</td></tr>';
+                 return;
+            }
+
+            // userMap se values (user objects) nikal kar sort karein
+            const sortedUsers = [...userMap.values()].sort((a, b) => a.username.localeCompare(b.username));
+
+            for (const user of sortedUsers) {
+                // Admin ko list mein nahi dikhayein
+                if (user.uid === SUPER_ADMIN_UID) continue;
+
+                const row = `
+                    <tr>
+                        <td class="text-primary-text">${user.username}</td>
+                        <td class="text-secondary-text">${user.uid}</td>
+                        <td class="flex gap-2">
+                            <button class="btn btn-danger" onclick="banUser('${user.uid}', '${user.username}')">
+                                <i class="fas fa-user-slash"></i> Ban
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                usersTable.innerHTML += row;
+            }
+        }
+
 
         // 2. Fetch All Rooms
         async function fetchRooms() {
@@ -319,39 +399,51 @@
             
             const roomsTable = $('rooms-table-body');
             roomsTable.innerHTML = ''; // Clear old data
+            roomMap.clear(); // Clear map before fetch
 
-            for (const doc of roomsSnapshot.docs) {
-                const room = doc.data();
-                
-                // NAYA: Room map ko populate karein
-                roomMap.set(doc.id, room.name);
+            const sortedRooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                                 .sort((a, b) => a.name.localeCompare(b.name));
 
-                // Get username from UID
-                const ownerName = userMap.get(room.ownerId) || room.ownerId.substring(0, 6) + '...';
+            for (const room of sortedRooms) {
+                roomMap.set(room.id, room.name);
+
+                const ownerName = userMap.get(room.ownerId)?.username || room.ownerId.substring(0, 6) + '...';
                 
-                // Get admin usernames
                 const adminNames = (room.admins || [])
-                    .map(adminId => userMap.get(adminId) || 'Unknown')
+                    .map(adminId => userMap.get(adminId)?.username || 'Unknown')
                     .join(', ');
+
+                // NAYA: Access Button
+                const allowJoining = room.allowJoining !== false; // Default true hai
+                const accessBtnClass = allowJoining ? 'btn-green' : 'btn-yellow';
+                const accessBtnIcon = allowJoining ? 'fa-door-open' : 'fa-door-closed';
+                const accessBtnText = allowJoining ? 'Public' : 'Closed';
 
                 const row = `
                     <tr>
                         <td class="text-primary-text">${room.name}</td>
                         <td class="text-accent-green">${ownerName}</td>
                         <td class="text-secondary-text">${adminNames || 'None'}</td>
+                        <td class="flex flex-col md:flex-row gap-2">
+                            <button class="btn ${accessBtnClass}" onclick="toggleRoomAccess('${room.id}', '${room.name}', ${allowJoining})">
+                                <i class="fas ${accessBtnIcon}"></i> ${accessBtnText}
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteRoom('${room.id}', '${room.name}')">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </td>
                     </tr>
                 `;
                 roomsTable.innerHTML += row;
             }
         }
 
-        // 3. Fetch Activity Log (Requires Collection Group Query)
+        // 3. Fetch Activity Log
         async function fetchActivityLog() {
             const activityTable = $('activity-table-body');
             activityTable.innerHTML = '';
             
             try {
-                // Yeh query ab aapke naye rules ke mutabiq kaam karegi
                 const activityQuery = db.collectionGroup('entryLog')
                                         .orderBy('timestamp', 'desc')
                                         .limit(50);
@@ -365,14 +457,13 @@
 
                 snapshot.forEach(doc => {
                     const log = doc.data();
-                    
-                    // BADLA HUA: Room ID se Room Name hasil karein
-                    const roomId = doc.ref.parent.parent.id; // Get room ID from path
-                    const roomName = roomMap.get(roomId) || roomId.substring(0, 10) + '...'; // roomMap se naam fetch karein
+                    const roomId = doc.ref.parent.parent.id;
+                    const roomName = roomMap.get(roomId) || roomId.substring(0, 10) + '...';
+                    const username = log.username || userMap.get(log.userId)?.username || 'Unknown User'; // Username fallback
 
                     const row_fixed = `
                         <tr>
-                            <td class="text-primary-text">${log.username}</td>
+                            <td class="text-primary-text">${username}</td>
                             <td class="text-secondary-text">Joined "${roomName}"</td>
                             <td class="text-accent-green">${log.timestamp.toDate().toLocaleString()}</td>
                         </tr>
@@ -382,7 +473,6 @@
                 
             } catch (error) {
                 console.error("Error fetching activity log:", error);
-                // Check for index error
                 if (error.code === 'failed-precondition') {
                     activityTable.innerHTML = '<tr><td colspan="3" class="text-center text-accent-red">Error: Firestore index required. Please check browser console (F12) for a link to create it.</td></tr>';
                     console.error("Firestore Index Missing!", error.message);
@@ -392,6 +482,93 @@
             }
         }
 
+        // --- NAYA: Admin Action Functions ---
+
+        // NAYA: Ban User
+        async function banUser(userId, username) {
+            if (!window.confirm(`Are you sure you want to BAN "${username}" (ID: ${userId})?\n\nThis will permanently mark their account as deleted and they will not be able to log in.`)) {
+                return;
+            }
+
+            try {
+                // Hum 'deleted: true' set kareinge, jaisa ke aapki main app check karti hai
+                await db.collection('users').doc(userId).update({
+                    deleted: true,
+                    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Presence doc bhi delete kardein taake woh DM list mein na dikhein
+                await db.collection('presence').doc(userId).delete();
+                
+                alert(`User "${username}" has been banned.`);
+                await loadDashboardData(); // Data refresh karein
+            } catch (error) {
+                console.error("Error banning user:", error);
+                alert(`Failed to ban user: ${error.message}\n\nPlease check Firestore rules.`);
+            }
+        }
+
+        // NAYA: Toggle Room Access
+        async function toggleRoomAccess(roomId, roomName, currentStatus) {
+            const newStatus = !currentStatus;
+            const action = newStatus ? 'PUBLIC' : 'CLOSED';
+            if (!window.confirm(`Are you sure you want to make room "${roomName}" ${action}?`)) {
+                return;
+            }
+            
+            try {
+                await db.collection('rooms').doc(roomId).update({
+                    allowJoining: newStatus
+                });
+                alert(`Room "${roomName}" is now ${action}.`);
+                await fetchRooms(); // Sirf rooms table refresh karein
+            } catch (error) {
+                console.error("Error toggling room access:", error);
+                alert(`Failed to update room: ${error.message}\n\nPlease check Firestore rules.`);
+            }
+        }
+
+        // NAYA: Delete Room
+        async function deleteRoom(roomId, roomName) {
+            if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE "${roomName}"?\n\nThis will delete all messages, call signals, and entry logs. This cannot be undone.`)) {
+                return;
+            }
+            
+            console.log(`Deleting room ${roomId}...`);
+            try {
+                // 1. Delete Subcollections (Bohot zaroori)
+                const messagesRef = db.collection('rooms').doc(roomId).collection('messages');
+                const signalsRef = db.collection('rooms').doc(roomId).collection('callSignaling');
+                const logsRef = db.collection('rooms').doc(roomId).collection('entryLog');
+                
+                await deleteSubcollection(messagesRef);
+                await deleteSubcollection(signalsRef);
+                await deleteSubcollection(logsRef);
+                
+                // 2. Delete main room document
+                await db.collection('rooms').doc(roomId).delete();
+                
+                alert(`Room "${roomName}" has been permanently deleted.`);
+                await loadDashboardData(); // Poora dashboard refresh karein
+            } catch (error) {
+                console.error("Error deleting room:", error);
+                alert(`Failed to delete room: ${error.message}\n\nPlease check Firestore rules.`);
+            }
+        }
+
+        // NAYA: Helper function for deleting subcollections
+        async function deleteSubcollection(collectionRef) {
+            let snapshot = await collectionRef.limit(100).get();
+            while (snapshot.size > 0) {
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+                snapshot = await collectionRef.limit(100).get();
+            }
+            console.log(`Subcollection ${collectionRef.path} deleted.`);
+        }
+
     </script>
 </body>
 </html>
+
